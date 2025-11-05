@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>圖片顏色搜尋與標記工具</title>
+<style>
+body {
+  font-family: "Microsoft JhengHei", sans-serif;
+  background: #f4f4f4;
+  display: flex;
+  gap: 20px;
+  padding: 20px;
+}
+#left-panel { flex: 1; }
+#canvas-container {
+  position: relative;
+  display: inline-block;
+  border: 1px solid #333;
+}
+canvas {
+  display: block;
+  background: #ddd;
+}
+.marker {
+  position: absolute;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+#controls {
+  margin: 10px 0;
+}
+#right-panel {
+  width: 320px;
+  background: #fff;
+  border: 1px solid #aaa;
+  border-radius: 8px;
+  padding: 10px;
+  overflow-y: auto;
+  height: 85vh;
+}
+.color-box {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 1px solid #000;
+  vertical-align: middle;
+  margin-right: 4px;
+}
+button { margin: 2px; cursor: pointer; }
+.result-record {
+  border: 1px solid #ccc;
+  margin-bottom: 10px;
+  border-radius: 6px;
+  padding: 5px;
+  background: #fafafa;
+}
+.result-item {
+  font-size: 13px;
+  margin-left: 8px;
+}
+.rgb-input {
+  width: 50px;
+  text-align: center;
+}
+</style>
+</head>
+<body>
+
+<div id="left-panel">
+  <h2>🎨 圖片顏色搜尋與標記工具</h2>
+  <input type="file" id="imageLoader" accept="image/*"><br>
+  <div id="canvas-container">
+    <canvas id="imageCanvas"></canvas>
+  </div>
+
+  <div id="controls">
+    <p id="info">滑鼠移動到圖片上顯示座標與顏色。</p>
+
+    <div>
+      <label>R: <input type="number" id="rValue" class="rgb-input" min="0" max="255"></label>
+      <label>G: <input type="number" id="gValue" class="rgb-input" min="0" max="255"></label>
+      <label>B: <input type="number" id="bValue" class="rgb-input" min="0" max="255"></label>
+    </div>
+    <label>容差：
+      <input type="number" id="tolerance" value="10" min="0" max="255">
+    </label>
+    <button id="searchBtn">🔍 搜尋顏色</button>
+    <button id="clearBtn">🧹 清除標記</button>
+
+    <hr>
+    <h4>標記樣式設定</h4>
+    <label>顏色：<input type="color" id="markerColor" value="#ff0000"></label>
+    <label>大小：<input type="number" id="markerSize" value="6" min="2" max="20"></label>
+    <label>樣式：
+      <select id="markerShape">
+        <option value="cross">十字</option>
+        <option value="circle">圓點</option>
+        <option value="square">方形</option>
+      </select>
+    </label>
+  </div>
+</div>
+
+<div id="right-panel">
+  <h3>搜尋紀錄</h3>
+  <div id="resultList">（尚未搜尋）</div>
+</div>
+
+<script>
+const canvas = document.getElementById('imageCanvas');
+const ctx = canvas.getContext('2d');
+const container = document.getElementById('canvas-container');
+const info = document.getElementById('info');
+const resultList = document.getElementById('resultList');
+
+const rInput = document.getElementById('rValue');
+const gInput = document.getElementById('gValue');
+const bInput = document.getElementById('bValue');
+const toleranceInput = document.getElementById('tolerance');
+
+const markerColorInput = document.getElementById('markerColor');
+const markerSizeInput = document.getElementById('markerSize');
+const markerShapeInput = document.getElementById('markerShape');
+
+let img = new Image();
+let imageData = null;
+let markers = [];
+
+// 載入圖片
+document.getElementById('imageLoader').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    img.onload = function() {
+      canvas.width = img.width;
+      canvas.height = img.height;
+      container.style.width = img.width + 'px';
+      container.style.height = img.height + 'px';
+      ctx.drawImage(img, 0, 0);
+      imageData = ctx.getImageData(0, 0, img.width, img.height);
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+});
+
+// 顯示滑鼠 RGB
+canvas.addEventListener('mousemove', e => {
+  if (!imageData) return;
+  const rect = canvas.getBoundingClientRect();
+  const x = Math.floor(e.clientX - rect.left);
+  const y = Math.floor(e.clientY - rect.top);
+  if (x < 0 || y < 0 || x >= imageData.width || y >= imageData.height) return;
+  const index = (y * imageData.width + x) * 4;
+  const [r, g, b] = imageData.data.slice(index, index + 3);
+  info.textContent = `座標 (${x}, ${y}) → RGB(${r}, ${g}, ${b})`;
+});
+
+// 點擊圖片自動填入RGB
+canvas.addEventListener('click', e => {
+  if (!imageData) return;
+  const rect = canvas.getBoundingClientRect();
+  const x = Math.floor(e.clientX - rect.left);
+  const y = Math.floor(e.clientY - rect.top);
+  const idx = (y * imageData.width + x) * 4;
+  const [r, g, b] = imageData.data.slice(idx, idx + 3);
+  rInput.value = r; gInput.value = g; bInput.value = b;
+});
+
+// 搜尋顏色
+document.getElementById('searchBtn').addEventListener('click', () => {
+  if (!imageData) return alert("請先載入圖片！");
+  const r = Number(rInput.value);
+  const g = Number(gInput.value);
+  const b = Number(bInput.value);
+  if ([r,g,b].some(v => isNaN(v))) return alert("請輸入完整 RGB 數值！");
+  const tolerance = Number(toleranceInput.value);
+
+  const w = imageData.width, h = imageData.height;
+  let results = [];
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      const [cr, cg, cb] = imageData.data.slice(i, i + 3);
+      if (Math.abs(cr - r) <= tolerance &&
+          Math.abs(cg - g) <= tolerance &&
+          Math.abs(cb - b) <= tolerance) {
+        results.push({x, y, cr, cg, cb});
+      }
+    }
+  }
+
+  if (!results.length) {
+    alert("未找到符合的顏色。");
+    return;
+  }
+
+  const recordDiv = document.createElement('div');
+  recordDiv.className = "result-record";
+  const header = document.createElement('div');
+  header.innerHTML = `<b>搜尋 RGB(${r},${g},${b}) ±${tolerance}</b> → 找到 ${results.length} 點`;
+  recordDiv.appendChild(header);
+
+  results.forEach(({x, y, cr, cg, cb}) => {
+    const item = document.createElement('div');
+    item.className = "result-item";
+    item.innerHTML = `
+      <span class="color-box" style="background:rgb(${cr},${cg},${cb})"></span>
+      (${x}, ${y})
+      <button>顯示位置</button>
+    `;
+    item.querySelector('button').onclick = () => addMarker(x, y);
+    recordDiv.appendChild(item);
+  });
+
+  resultList.prepend(recordDiv);
+  if (resultList.textContent.includes('尚未搜尋')) resultList.innerHTML = "";
+});
+
+function addMarker(x, y) {
+  const marker = document.createElement('div');
+  marker.className = 'marker';
+  const color = markerColorInput.value;
+  const size = Number(markerSizeInput.value);
+  const shape = markerShapeInput.value;
+
+  marker.dataset.shape = shape;
+  marker.dataset.size = size;
+  marker.dataset.color = color;
+
+  applyMarkerStyle(marker, color, size, shape);
+  marker.style.left = x + 'px';
+  marker.style.top = y + 'px';
+  container.appendChild(marker);
+  markers.push(marker);
+}
+
+function applyMarkerStyle(marker, color, size, shape) {
+  marker.style.position = 'absolute';
+  marker.style.left = marker.style.left;
+  marker.style.top = marker.style.top;
+  marker.style.transform = 'translate(-50%, -50%)';
+
+  // 先清除樣式
+  marker.style.background = 'none';
+  marker.style.border = 'none';
+  marker.style.borderRadius = '0';
+  marker.style.width = `${size * 2}px`;
+  marker.style.height = `${size * 2}px`;
+
+  if (shape === 'cross') {
+    // 十字 (只有線條)
+    const thickness = 2; // 線條粗細
+    marker.style.background = `
+      linear-gradient(0deg, transparent calc(50% - ${thickness/2}px), ${color} calc(50% - ${thickness/2}px), ${color} calc(50% + ${thickness/2}px), transparent calc(50% + ${thickness/2}px)),
+      linear-gradient(90deg, transparent calc(50% - ${thickness/2}px), ${color} calc(50% - ${thickness/2}px), ${color} calc(50% + ${thickness/2}px), transparent calc(50% + ${thickness/2}px))
+    `;
+  } else if (shape === 'circle') {
+    // 實心圓
+    marker.style.backgroundColor = color;
+    marker.style.borderRadius = '50%';
+  } else if (shape === 'square') {
+    // 實心方形
+    marker.style.backgroundColor = color;
+  }
+}
+
+
+document.getElementById('clearBtn').addEventListener('click', () => {
+  markers.forEach(m => m.remove());
+  markers = [];
+});
+
+// 樣式變更時，更新所有現有標記
+function updateMarkers() {
+  markers.forEach(marker => {
+    applyMarkerStyle(marker, markerColorInput.value, Number(markerSizeInput.value), markerShapeInput.value);
+  });
+}
+markerColorInput.addEventListener('input', updateMarkers);
+markerSizeInput.addEventListener('input', updateMarkers);
+markerShapeInput.addEventListener('change', updateMarkers);
+</script>
+
+</body>
+</html>
