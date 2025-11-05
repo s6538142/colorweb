@@ -200,10 +200,43 @@ document.getElementById('searchBtn').addEventListener('click', () => {
 
   const recordDiv = document.createElement('div');
   recordDiv.className = "result-record";
+
+  // header
   const header = document.createElement('div');
-  header.innerHTML = `<b>搜尋 RGB(${r},${g},${b}) ±${tolerance}</b> → 找到 ${results.length} 點`;
+  header.style.display = 'flex';
+  header.style.justifyContent = 'space-between';
+  header.style.alignItems = 'center';
+  header.style.cursor = 'default';
+  header.style.userSelect = 'none';
+
+  const title = document.createElement('span');
+  title.innerHTML = `<b>搜尋 RGB(${r},${g},${b}) ±${tolerance}</b> → 找到 ${results.length} 點`;
+  header.appendChild(title);
+
+  // 按鈕容器
+  const btnContainer = document.createElement('span');
+
+  // 折疊按鈕
+  const toggleBtn = document.createElement('button');
+  toggleBtn.textContent = '▾'; // 初始向下箭頭
+  toggleBtn.style.marginLeft = '5px';
+  toggleBtn.style.cursor = 'pointer';
+  toggleBtn.title = '折疊/展開';
+  btnContainer.appendChild(toggleBtn);
+
+  // 刪除按鈕
+  const delBtn = document.createElement('button');
+  delBtn.textContent = '✖';
+  delBtn.style.marginLeft = '5px';
+  delBtn.style.cursor = 'pointer';
+  delBtn.title = '刪除此搜尋結果';
+  btnContainer.appendChild(delBtn);
+
+  header.appendChild(btnContainer);
   recordDiv.appendChild(header);
 
+  // content
+  const contentDiv = document.createElement('div');
   results.forEach(({x, y, cr, cg, cb}) => {
     const item = document.createElement('div');
     item.className = "result-item";
@@ -213,13 +246,36 @@ document.getElementById('searchBtn').addEventListener('click', () => {
       <button>顯示位置</button>
     `;
     item.querySelector('button').onclick = () => addMarker(x, y);
-    recordDiv.appendChild(item);
+    contentDiv.appendChild(item);
+  });
+  recordDiv.appendChild(contentDiv);
+
+  // 折疊/展開功能
+  toggleBtn.addEventListener('click', () => {
+    if (contentDiv.style.display === 'none') {
+      contentDiv.style.display = 'block';
+      toggleBtn.textContent = '▾';
+    } else {
+      contentDiv.style.display = 'none';
+      toggleBtn.textContent = '▸';
+    }
   });
 
+  // 刪除功能
+  delBtn.addEventListener('click', () => {
+    recordDiv.remove();
+  });
+
+  // 如果是第一次搜尋，清掉提示
+  if (resultList.textContent.includes('尚未搜尋')) {
+      resultList.textContent = "";
+  }
+
   resultList.prepend(recordDiv);
-  if (resultList.textContent.includes('尚未搜尋')) resultList.innerHTML = "";
 });
 
+
+// 新增標記
 function addMarker(x, y) {
   const marker = document.createElement('div');
   marker.className = 'marker';
@@ -238,13 +294,12 @@ function addMarker(x, y) {
   markers.push(marker);
 }
 
+// 樣式套用
 function applyMarkerStyle(marker, color, size, shape) {
   marker.style.position = 'absolute';
   marker.style.left = marker.style.left;
   marker.style.top = marker.style.top;
   marker.style.transform = 'translate(-50%, -50%)';
-
-  // 先清除樣式
   marker.style.background = 'none';
   marker.style.border = 'none';
   marker.style.borderRadius = '0';
@@ -252,29 +307,27 @@ function applyMarkerStyle(marker, color, size, shape) {
   marker.style.height = `${size * 2}px`;
 
   if (shape === 'cross') {
-    // 十字 (只有線條)
-    const thickness = 2; // 線條粗細
+    // 十字 (純線條)
+    const thickness = 2;
     marker.style.background = `
       linear-gradient(0deg, transparent calc(50% - ${thickness/2}px), ${color} calc(50% - ${thickness/2}px), ${color} calc(50% + ${thickness/2}px), transparent calc(50% + ${thickness/2}px)),
       linear-gradient(90deg, transparent calc(50% - ${thickness/2}px), ${color} calc(50% - ${thickness/2}px), ${color} calc(50% + ${thickness/2}px), transparent calc(50% + ${thickness/2}px))
     `;
   } else if (shape === 'circle') {
-    // 實心圓
     marker.style.backgroundColor = color;
     marker.style.borderRadius = '50%';
   } else if (shape === 'square') {
-    // 實心方形
     marker.style.backgroundColor = color;
   }
 }
 
-
+// 清除標記
 document.getElementById('clearBtn').addEventListener('click', () => {
   markers.forEach(m => m.remove());
   markers = [];
 });
 
-// 樣式變更時，更新所有現有標記
+// 樣式變更時更新所有現有標記
 function updateMarkers() {
   markers.forEach(marker => {
     applyMarkerStyle(marker, markerColorInput.value, Number(markerSizeInput.value), markerShapeInput.value);
