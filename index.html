@@ -242,12 +242,13 @@ document.getElementById('searchBtn').addEventListener('click', () => {
     item.className = "result-item";
     item.innerHTML = `
       <span class="color-box" style="background:rgb(${cr},${cg},${cb})"></span>
-      (${x}, ${y})
+      (${x}, ${y}) → <span>RGB(${cr}, ${cg}, ${cb})</span>
       <button>顯示位置</button>
     `;
     item.querySelector('button').onclick = () => addMarker(x, y);
     contentDiv.appendChild(item);
   });
+
   recordDiv.appendChild(contentDiv);
 
   // 折疊/展開功能
